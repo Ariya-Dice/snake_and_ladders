@@ -1,36 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import detectEthereumProvider from '@metamask/detect-provider';
-import WalletConnect from '@walletconnect/client';
-import QRCodeModal from '@walletconnect/qrcode-modal';
+import { ethers } from 'ethers';
+import WalletConnectProvider from '@walletconnect/ethereum-provider';
 
 const WalletConnectButton = ({ onConnect }) => {
     const [account, setAccount] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [connector, setConnector] = useState(null);
 
     const isAndroid = /android/i.test(navigator.userAgent);
 
     const walletDeepLinks = {
         trust: {
-            deeplink: 'trust://browse?action=connect&url=' + encodeURIComponent(window.location.href),
-            universal: 'https://link.trustwallet.com/open_url?url=' + encodeURIComponent(window.location.href)
+            deeplink: 'trust://wc?uri=',
+            universal: 'https://link.trustwallet.com/wc?uri='
         },
         metamask: {
-            deeplink: 'metamask://dapp?url=' + encodeURIComponent(window.location.href),
-            universal: 'https://metamask.app.link/dapp/' + window.location.host
+            deeplink: 'metamask://wc?uri=',
+            universal: 'https://metamask.app.link/wc?uri='
         },
         coinbase: {
-            deeplink: 'coinbase-wallet://',
-            universal: 'https://go.cb-w.com/'
+            deeplink: 'cbwallet://wc?uri=',
+            universal: 'https://go.cb-w.com/wc?uri='
         },
         safepal: {
-            deeplink: 'safepal://',
-            universal: 'https://safepal.io/'
+            deeplink: 'safepalwallet://wc?uri=',
+            universal: 'https://www.safepal.com/download'
         }
     };
 
-    // Check if the wallet is available using Deeplink
     const checkDeeplinkAvailability = async (wallet) => {
         return new Promise((resolve) => {
             const iframe = document.createElement('iframe');
@@ -38,6 +36,7 @@ const WalletConnectButton = ({ onConnect }) => {
             iframe.src = wallet.deeplink;
 
             const timeout = setTimeout(() => {
+                alert(`Wallet not detected. Redirecting to ${wallet.universal}`);
                 window.location.href = wallet.universal;
                 resolve(false);
             }, 500);
@@ -52,10 +51,10 @@ const WalletConnectButton = ({ onConnect }) => {
         });
     };
 
-    // Check if any wallets are installed
     const checkInstalledWallets = async (links) => {
         try {
-            for (const [wallet, info] of Object.entries(links)) {
+            for (const [walletName, info] of Object.entries(links)) {
+                console.log(`Checking wallet: ${walletName}`);
                 const isInstalled = await checkDeeplinkAvailability(info);
                 if (isInstalled) return info.deeplink;
             }
@@ -66,107 +65,25 @@ const WalletConnectButton = ({ onConnect }) => {
         }
     };
 
-    // Connect to the wallet
-    const connectWallet = async () => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            const provider = await detectEthereumProvider();
-            if (provider) {
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                handleSuccess(accounts[0]);
-                return;
-            }
-
-            if (isAndroid) {
-                const installedWallet = await checkInstalledWallets(walletDeepLinks);
-                
-                if (installedWallet) {
-                    window.location.href = installedWallet;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    initWalletConnect();
-                } else {
-                    initWalletConnect();
-                    QRCodeModal.open();
-                }
-            } else {
-                initWalletConnect();
-                QRCodeModal.open();
-            }
-        } catch (error) {
-            handleError(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Initialize WalletConnect
-    const initWalletConnect = () => {
-        const connector = new WalletConnect({
-            bridge: 'https://bridge.walletconnect.org',
-            qrcodeModal: QRCodeModal,
-            clientMeta: {
-                description: 'Ariya Snake & Ladder Game',
-                url: window.location.href,
-                icons: ['https://your-dapp-logo.png'],
-                name: 'Ariya Dice Game'
-            }
-        });
-
-        connector.on('connect', (error, payload) => {
-            if (error) {
-                handleError(error);
-                return;
-            }
-            handleWalletConnectSession(connector);
-        });
-
-        connector.on('session_update', (error, payload) => {
-            if (error) {
-                handleError(error);
-                return;
-            }
-            handleWalletConnectSession(connector);
-        });
-
-        connector.on('disconnect', (error) => {
-            if (error) {
-                handleError(error);
-                return;
-            }
-            setAccount(null);
-        });
-
-        setConnector(connector);
-    };
-
-    // Handle WalletConnect session
-    const handleWalletConnectSession = (connector) => {
-        const { accounts } = connector;
-        if (accounts && accounts.length > 0) {
-            handleSuccess(accounts[0]);
-        }
-    };
-
-    const handleSuccess = (account) => {
+    const handleSuccess = async (account, provider) => {
         setAccount(account);
-        onConnect(account);
+        const signer = await provider.getSigner();
+        onConnect(account, signer); // پاس دادن account و signer به onConnect
     };
 
     const handleError = (error) => {
-        let errorMessage = 'Connection failed';
-        
+        let errorMessage = 'Failed to connect to wallet';
+
         if (error.code === 4001) {
-            errorMessage = 'User rejected the request';
+            errorMessage = 'You rejected the connection request';
         } else if (error.code === -32002) {
-            errorMessage = 'Already processing request';
+            errorMessage = 'A connection request is already pending';
         } else if (error.message.includes('No provider found')) {
-            errorMessage = 'No wallet detected';
+            errorMessage = 'No wallet detected. Please install MetaMask or another wallet';
         } else {
             errorMessage = error.message || 'An unexpected error occurred';
         }
-        
+
         setError(errorMessage);
         console.error('Connection Error:', {
             code: error.code,
@@ -175,33 +92,42 @@ const WalletConnectButton = ({ onConnect }) => {
         });
     };
 
-    useEffect(() => {
-        if (connector) {
-            connector.on('connect', (error, payload) => {
-                if (error) {
-                    handleError(error);
-                    return;
-                }
-                handleWalletConnectSession(connector);
+    const connectWallet = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            // ابتدا تلاش برای اتصال به MetaMask
+            const provider = await detectEthereumProvider();
+            if (provider && provider.isMetaMask) {
+                const ethersProvider = new ethers.BrowserProvider(provider);
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                await handleSuccess(accounts[0], ethersProvider);
+                return;
+            }
+
+            // در غیر این صورت، استفاده از WalletConnect
+            const walletConnectProvider = new WalletConnectProvider({
+                rpc: {
+                    97: 'https://bsc-testnet-rpc.publicnode.com', // برای BSC Testnet
+                },
+                chainId: 97, // chainId برای BSC Testnet
+                qrcode: true,
+                qrcodeModalOptions: {
+                    mobileLinks: ['metamask', 'trust', 'coinbase', 'safepal'],
+                },
             });
 
-            connector.on('session_update', (error, payload) => {
-                if (error) {
-                    handleError(error);
-                    return;
-                }
-                handleWalletConnectSession(connector);
-            });
-
-            connector.on('disconnect', (error) => {
-                if (error) {
-                    handleError(error);
-                    return;
-                }
-                setAccount(null);
-            });
+            await walletConnectProvider.enable();
+            const ethersProvider = new ethers.BrowserProvider(walletConnectProvider);
+            const accounts = await ethersProvider.listAccounts();
+            await handleSuccess(accounts[0].address, ethersProvider);
+        } catch (error) {
+            handleError(error);
+        } finally {
+            setLoading(false);
         }
-    }, [connector]);
+    };
 
     return (
         <div>
@@ -210,7 +136,7 @@ const WalletConnectButton = ({ onConnect }) => {
                 disabled={loading}
                 className="wallet-connect-button"
             >
-                {loading ? 'Connecting...' : account ? `Connected: ${account}` : 'Connect Wallet'}
+                {loading ? 'Connecting...' : account ? `Connected: ${account.substring(0, 6)}...${account.substring(account.length - 4)}` : 'Connect Wallet'}
             </button>
             {error && <p style={{ color: 'red' }}>{error}</p>}
         </div>
