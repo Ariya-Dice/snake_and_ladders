@@ -1,0 +1,345 @@
+@font-face {
+    font-family: 'Handjet-Medium';
+    src: url('./font/Handjet-Medium.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Handjet-Bold';
+    src: url('./font/Handjet-Bold.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Alexandria';
+    src: url('./font/Alexandria.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'CustomFont';
+    src: url('./font/font001.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Changa';
+    src: url('./font/Changa-Medium.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'FontdinerSwanky';
+    src: url('./font/FontdinerSwanky.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Rubik-Light';
+    src: url('./font/Rubik-Light.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Barriecito-Regular';
+    src: url('./font/Barriecito-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    overflow-y: auto;
+    font-family: 'CustomFont', Arial, sans-serif;
+    background-color: #000;
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    background-image: url('./pic/snake.svg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    min-height: 100vh;
+    position: relative;
+    padding: 10px;
+}
+
+.neon-text {
+    color: #006400;
+    text-shadow: 
+        0 0 5px #32CD32,
+        0 0 10px #32CD32,
+        0 0 15px #32CD32,
+        0 0 20px #32CD32,
+        0 0 30px #32CD32;
+}
+
+.event-log {
+    height: 7vh;
+    overflow-y: auto;
+    width: 300px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.tooltip {
+    visibility: hidden;
+    width: 120px;
+    background-color: rgba(0, 0, 0, 0.0);
+    color: #fff;
+    text-align: center;
+    border-radius: 5px;
+    padding: 5px;
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    transition: all 0.2s ease;
+}
+
+.buy-antidote-container:hover .tooltip {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.social-button:hover .tooltip,
+.donate-button:hover .donate-tooltip {
+    visibility: visible;
+}
+
+button {
+    margin: 10px;
+    padding: 10px 20px;
+    font-size: 24px;
+    cursor: pointer;
+    background-color: rgba(0, 0, 0, 0.0);
+    border: none;
+    border-radius: 30px;
+    color: red;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: rgba(255, 255, 255, 0.0);
+}
+
+.social-buttons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: flex;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(0%);
+}
+
+.social-icon {
+    width: 30px;
+    height: 30px;
+    margin: 0 10px;
+    cursor: pointer;
+}
+
+.donate-button {
+    position: relative;
+    margin: 0 5px;
+}
+
+.donate-icon {
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+}
+
+.donate-tooltip {
+    visibility: hidden;
+    width: 220px;
+    background-color: rgba(0, 0, 0, 0.0);
+    color: #fff;
+    text-align: center;
+    border-radius: 5px;
+    padding: 5px;
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+}
+
+.donate-button:hover .donate-tooltip {
+    visibility: visible;
+}
+
+.wallet-connect-button {
+    background-color: transparent;
+    border: 2px solid #32CD32;
+    border-radius: 50%;
+    padding: 15px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.3s;
+    position: relative;
+    color: #32CD32;
+    font-size: 16px;
+}
+
+.wallet-connect-button:hover {
+    background-color: rgba(50, 205, 50, 0.1);
+    transform: scale(1.05);
+}
+
+.how-to-play-button:hover {
+    background-color: rgba(46, 139, 87, 0.2);
+    border: 2px solid #32CD32;
+    transform: scale(1.1);
+    box-shadow: 0 0 20px #2E8B57, 0 0 30px #2E8B57, 0 0 40px #2E8B57;
+}
+
+.how-to-play-icon {
+    width: 40px;
+    margin-right: 5px;
+}
+
+.how-to-play-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #32CD32;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 1000;
+    max-height: 80vh;
+    width: 60%;
+    overflow-y: auto;
+    border: none;
+    box-shadow: 0 0 100px #32CD32;
+    font-family: 'CustomFont', Arial, sans-serif;
+}
+
+.how-to-play-modal::-webkit-scrollbar {
+    width: 10px;
+}
+
+.how-to-play-modal::-webkit-scrollbar-thumb {
+    background: #32CD32;
+    border-radius: 10px;
+    border: 2px solid #006400;
+}
+
+.how-to-play-modal::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+}
+
+.how-to-play-modal h2 {
+    color: #FFD700;
+    font-family: 'Changa', sans-serif;
+    text-align: center;
+    margin-bottom: 1px;
+    font-size: 24px;
+}
+
+.how-to-play-modal p {
+    line-height: 1.6;
+    margin-bottom: 15px;
+    font-size: 18px;
+    color: #fff;
+}
+
+.how-to-play-modal p.fa {
+    font-family: 'Alexandria', sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #fff;
+    text-align: right;
+}
+
+.how-to-play-modal button {
+    background-color: #32CD32;
+    color: #000;
+    padding: 1px 1px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    float: right;
+    transition: all 0.3s;
+    font-family: 'CustomFont', Arial, sans-serif;
+}
+
+.how-to-play-modal button:hover {
+    background-color: #228B22;
+    box-shadow: 0 0 10px #32CD32;
+}
+
+.messages-log {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 600px;
+}
+
+.message {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    border-left: 5px solid #32CD32;
+}
+
+.life-time-container {
+    width: 35%;
+    margin: 20px 0;
+}
+
+.life-time-bar {
+    background-color: red;
+    border-radius: 5px;
+    height: 20px;
+    overflow: hidden;
+}
+
+.life-time-progress {
+    background-color: #32CD32;
+    height: 100%;
+    transition: width 1s ease;
+}
+
+.loading-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 20px;
+    border-radius: 100px;
+    text-align: center;
+}
+
+.loading-gif {
+    width: 250px;
+    height: auto;
+    margin-bottom: 10px;
+}
+
+.loading-text {
+    color: #fff;
+    font-size: 16px;
+    font-family: 'CustomFont', Arial, sans-serif;
+}
