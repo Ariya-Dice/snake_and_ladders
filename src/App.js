@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import DiceRollingGameABI from './SnakeGame.json';
@@ -36,32 +37,26 @@ function App() {
         antidoteCount: 0,
         snakeEncounters: 0,
     });
+    const [destination, setDestination] = useState(1); // برای انیمیشن‌های پس از پرتاب تاس
     const [loading, setLoading] = useState(false);
     const [activePlayers, setActivePlayers] = useState(0);
     const [events, setEvents] = useState([]);
     const [showHowToPlay, setShowHowToPlay] = useState(false);
     const [walletId, setWalletId] = useState('');
+    const [fullAddress, setFullAddress] = useState('');
     const [prizePool, setPrizePool] = useState(0);
     const [isRolling, setIsRolling] = useState(false);
+    const [isWalletConnected, setIsWalletConnected] = useState(false); // پرچم اتصال کیف‌پول
     const howToPlayRef = useRef(null);
 
-    // مدیریت کلیک خارج از HowToPlay برای بستن آن
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (howToPlayRef.current && !howToPlayRef.current.contains(event.target)) {
-                setShowHowToPlay(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
-
-    // دریافت اطلاعات بازیکن از قرارداد هوشمند
     const getPlayerDetails = useCallback(async (playerAddress) => {
-        if (!signer) return;
+        if (!signer || !playerAddress || !ethers.isAddress(playerAddress)) {
+            console.log('Invalid signer or playerAddress:', playerAddress);
+            toast.error('Invalid wallet address.');
+            return;
+        }
         try {
+            console.log(`Fetching player details for address: ${playerAddress}`);
             const contract = new ethers.Contract(contractAddress, DiceRollingGameABI, signer);
             const playerStatus = await contract.getPlayerStatus(playerAddress);
 
@@ -79,7 +74,7 @@ function App() {
                 snakeEncounters
             ] = playerStatus;
 
-            setPlayerInfo({
+            const updatedPlayerInfo = {
                 position: Number(position),
                 hasAntidote,
                 isActive,
@@ -91,7 +86,11 @@ function App() {
                 joinedAt: Number(joinedAt),
                 antidoteCount: Number(antidoteCount),
                 snakeEncounters: Number(snakeEncounters),
-            });
+            };
+
+            console.log('Player details fetched:', updatedPlayerInfo);
+            setPlayerInfo(updatedPlayerInfo);
+            setDestination(updatedPlayerInfo.position); // تنظیم destination برای انیمیشن‌های بعدی
         } catch (error) {
             console.error("Failed to fetch player details:", error);
             const errorMessage = error.message.includes('network')
@@ -101,39 +100,40 @@ function App() {
         }
     }, [signer]);
 
-    // دریافت تعداد بازیکنان فعال
     const fetchActivePlayers = useCallback(async () => {
         if (!signer) return;
         try {
             const contract = new ethers.Contract(contractAddress, DiceRollingGameABI, signer);
             const count = await contract.getActivePlayers();
             setActivePlayers(Number(count));
+            console.log(`Active players: ${count}`);
         } catch (error) {
             console.error("Failed to fetch active players:", error);
             toast.error("Error fetching active players.");
         }
     }, [signer]);
 
-    // دریافت اطلاعات بازی مانند جایزه
     const fetchGameData = useCallback(async () => {
         if (!signer) return;
         try {
             const contract = new ethers.Contract(contractAddress, DiceRollingGameABI, signer);
             const [fetchedPrizePool] = await contract.getPrizePoolAndWinners();
-            setPrizePool(ethers.formatUnits(fetchedPrizePool, 18));
+            const prizePoolValue = ethers.formatUnits(fetchedPrizePool, 18);
+            setPrizePool(prizePoolValue);
+            console.log(`Prize pool: ${prizePoolValue} tBNB`);
         } catch (error) {
             console.error("Failed to fetch game data:", error);
             toast.error("Failed to load game data. Please refresh the page.");
         }
     }, [signer]);
 
-    // مدیریت اتصال کیف‌پول (دریافت از WalletConnectButton)
     const handleWalletConnect = useCallback(async (account, signer) => {
         try {
             setSigner(signer);
             setWalletId(account.substring(0, 6));
+            setFullAddress(account);
+            setIsWalletConnected(true); // تنظیم پرچم اتصال
 
-            // تغییر شبکه به Binance Smart Chain Testnet
             try {
                 await signer.provider.send('wallet_switchEthereumChain', [{ chainId: '0x61' }]);
             } catch (switchError) {
@@ -156,18 +156,35 @@ function App() {
                 }
             }
 
-            // به‌روزرسانی اطلاعات بازی
-            await getPlayerDetails(account);
-            await fetchActivePlayers();
-            await fetchGameData();
             toast.success('Wallet connected successfully!');
         } catch (error) {
             console.error('Error connecting wallet:', error);
             toast.error('Error connecting wallet: ' + (error.message || 'Unknown error'));
         }
-    }, [getPlayerDetails, fetchActivePlayers, fetchGameData]);
+    }, []);
 
-    // پیوستن به بازی
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (howToPlayRef.current && !howToPlayRef.current.contains(event.target)) {
+                setShowHowToPlay(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
+    // فراخوانی اطلاعات بازیکن پس از اتصال کیف‌پول
+    useEffect(() => {
+        if (signer && fullAddress) {
+            console.log(`Fetching player details for wallet: ${fullAddress}`);
+            getPlayerDetails(fullAddress);
+            fetchActivePlayers();
+            fetchGameData();
+        }
+    }, [signer, fullAddress, getPlayerDetails, fetchActivePlayers, fetchGameData]);
+
     const joinGame = async () => {
         if (!signer) {
             toast.error('Please connect your wallet first.');
@@ -178,7 +195,7 @@ function App() {
             const contract = new ethers.Contract(contractAddress, DiceRollingGameABI, signer);
             const tx = await contract.joinGame({ value: ethers.parseEther('0.004') });
             await tx.wait();
-            await getPlayerDetails(await signer.getAddress());
+            await getPlayerDetails(fullAddress);
             await fetchActivePlayers();
             await fetchGameData();
             toast.success("Successfully joined the game!");
@@ -194,7 +211,6 @@ function App() {
         }
     };
 
-    // پرتاب تاس
     const rollDice = async () => {
         if (!signer) {
             toast.error('Please connect your wallet first.');
@@ -220,6 +236,7 @@ function App() {
             await getPlayerDetails(playerAddress);
             await fetchActivePlayers();
             await fetchGameData();
+            setDestination(playerInfo.position); // تنظیم destination برای انیمیشن
             toast.success("Dice rolled successfully!");
             setEvents(prevEvents => {
                 const newEvents = [...prevEvents, "You rolled the dice!"];
@@ -235,7 +252,6 @@ function App() {
         }
     };
 
-    // خرید پادزهر
     const buyAntidote = async () => {
         if (!signer) {
             toast.error('Please connect your wallet first.');
@@ -246,7 +262,7 @@ function App() {
             const contract = new ethers.Contract(contractAddress, DiceRollingGameABI, signer);
             const tx = await contract.buyAntidote({ value: ethers.parseEther('0.002') });
             await tx.wait();
-            await getPlayerDetails(await signer.getAddress());
+            await getPlayerDetails(fullAddress);
             toast.success("Antidote purchased successfully!");
             setEvents(prevEvents => {
                 const newEvents = [...prevEvents, "You purchased an antidote!"];
@@ -260,7 +276,6 @@ function App() {
         }
     };
 
-    // مدیریت پیام‌های خطا
     const handleErrorMessage = (error) => {
         let errorMessage = "Unknown error.";
         if (error && error.data && error.data.message) {
@@ -313,16 +328,14 @@ function App() {
         toast.error(errorMessage);
     };
 
-    // محاسبه درصد زمان باقی‌مانده
     const calculateLifeTimePercentage = () => {
         const currentTime = Math.floor(Date.now() / 1000);
         const elapsedTime = currentTime - playerInfo.lastActivityTime;
-        const totalDuration = 24 * 60 * 60; // 24 ساعت به ثانیه
+        const totalDuration = 24 * 60 * 60;
         const remainingTime = Math.max(totalDuration - elapsedTime, 0);
         return (remainingTime / totalDuration) * 100;
     };
 
-    // کپی آدرس اهدا به کلیپ‌بورد
     const copyToClipboard = () => {
         navigator.clipboard.writeText(donationAddress).then(() => {
             toast.success("Donation address copied to clipboard!");
@@ -357,7 +370,11 @@ function App() {
             <p className="neon-text" style={{ marginBottom: '20px', color: '#006400', textShadow: '0 0 5px #32CD32, 0 0 10px #32CD32, 0 0 15px #32CD32' }}>
                 Active Players: {activePlayers}
             </p>
-            <GameBoard playerPosition={playerInfo.position} />
+            <GameBoard
+                playerPosition={playerInfo.position}
+                destination={destination}
+                isWalletConnected={isWalletConnected}
+            />
             <div className="player-info" style={{ fontFamily: 'CustomFont' }}>
                 <p className="neon-text" style={{ color: '#006400', textShadow: '0 0 5px #32CD32, 0 0 10px #32CD32, 0 0 15px #32CD32' }}>
                     Position: {playerInfo.position}

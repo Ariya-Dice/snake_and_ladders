@@ -1,0 +1,553 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+
+contract SnakesAndLaddersLogic is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+    // Constants for game configuration
+    uint256 public constant ENTRY_FEE = 0.004 ether; // Entry fee for joining the game
+    uint256 public constant ANTIDOTE_FEE = 0.002 ether; // Fee for purchasing an antidote
+    uint256 public constant MAX_PLAYERS = 1000; // Maximum number of players allowed
+    uint256 public constant OWNER_SHARE_PERCENT = 10; // Percentage of entry fees that go to the contract owner
+    uint256 public constant DISTRIBUTION_INTERVAL = 24 hours; // Distribution interval
+    uint256 public constant MAX_HEROES = 5000; // Maximum number of first heroes
+    uint8 public constant MAX_ANTIDOTES = 3; // Maximum number of antidotes a player can buy
+
+    // State variables
+    uint256 public prizePool; // Total prize pool available for winners
+    uint256 public totalWinners; // Total number of winners in the current game session
+    uint256 public activePlayerCount; // Count of currently active players
+    bool public paused; // Indicates whether the contract is paused
+    uint256 public lastDistributionTime; // Last time prizes were distributed
+
+    // New state variables for first heroes
+    address[] public firstHeroes; // Array to store addresses of the first heroes
+    mapping(address => bool) public isFirstHero; // Mapping to check if an address is already a first hero
+
+    // Array to store addresses of all players
+    address[] public playerAddresses; // Array to store addresses of all players
+
+    // Struct to represent a player in the game
+    struct Player {
+        uint8 position; // Current position of the player on the board
+        bool hasAntidote; // Indicates if the player has purchased an antidote
+        bool isActive; // Indicates if the player is currently active in the game
+        uint256 diceRollCount; // Count of how many times the player has rolled the dice
+        uint8 lastDiceRoll; // Last dice roll result (1 to 6)
+        uint8 group; // Group number based on dice rolls
+        uint256 lastActivityTime; // زمان آخرین فعالیت
+        uint256 joinedAt; // زمان پیوستن
+        uint8 antidoteCount; // تعداد پادزهرها
+        uint8 snakeEncounters; // تعداد برخورد با مار
+    }
+
+    // Mappings to store game data
+    mapping(address => Player) public players; // Maps player addresses to their Player structs
+    mapping(uint256 => uint256) public ladders; // Maps ladder start positions to their end positions
+    mapping(uint256 => uint256) public snakes; // Maps snake head positions to their tails
+    address[] public winners; // Array to store the addresses of winners
+
+    // Define the distribution percentages for each group
+    uint256[20] public groupPercentages = [
+        13, // Group 1
+        12, // Group 2
+        11, // Group 3
+        10, // Group 4
+        9, // Group 5
+        8, // Group 6
+        7, // Group 7
+        6, // Group 8
+        5, // Group 9
+        4, // Group 10
+        3,  // Group 11
+        2,  // Group 12
+        2,  // Group 13
+        2,  // Group 14
+        1,  // Group 15
+        1,  // Group 16
+        1,  // Group 17
+        1,  // Group 18
+        1,  // Group 19
+        1   // Group 20
+    ];
+
+    // Mapping to store group balances
+    mapping(uint8 => uint256) public groupBalances; // Maps group number to its balance
+
+    // New mapping to check if a player has already won
+    mapping(address => bool) private isWinner;
+
+    // Events to log important actions in the game
+    event PlayerJoined(address indexed player); // Emitted when a player joins the game
+    event DiceRolled(address indexed player, uint256 diceValue, uint256 newPosition); // Emitted when a player rolls the dice
+    event AntidotePurchased(address indexed player, uint8 newCount); // Emitted when a player buys an antidote
+    event AntidoteUsed(address indexed player, uint8 remaining); // Emitted when a player uses an antidote
+    event SnakeEncountered(address indexed player, uint256 position, bool antidoteUsed); // Emitted when a player encounters a snake
+    event FirstHeroRegistered(address indexed player); // Emitted when the first hero is registered
+    event PlayerPoisoned(address indexed player); // Emitted when a player is poisoned
+    event PlayerWon(address indexed player, uint256 prize); // Emitted when a player wins the game
+    event PrizeDistributed(uint256 amount, address[] winners); // Emitted when prizes are distributed to winners
+    event ContractPaused(bool status); // Emitted when the contract is paused or unpaused
+    event PlayerRemoved(address indexed player); // Emitted when a player is removed from the game
+    event PlayersRemoved(address[] players); // Emitted when multiple players are removed from the game
+    event PlayerEliminated(address indexed player); // Emitted when a player is eliminated for not winning
+    event PrizeWithdrawn(address indexed winner, uint256 amount); // Emitted when a prize is withdrawn by a winner
+
+    // Modifier to ensure functions can only be executed when the contract is not paused
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
+    // Modifier to ensure only externally owned accounts (EOAs) can call certain functions
+    modifier onlyEOA() {
+        uint32 size;
+        assembly {
+            size := extcodesize(caller())
+        }
+        require(size == 0, "Only EOA can call this function");
+        _;
+    }
+    
+    // Initialize function to set up the contract
+    function initialize() public initializer {
+        __Ownable_init(msg.sender); // Initialize the Ownable contract
+        __ReentrancyGuard_init(); // Initialize the ReentrancyGuard contract
+        _initializeLaddersAndSnakes();
+        lastDistributionTime = block.timestamp; // Initialize last distribution time
+    }
+
+    // Private function to initialize ladders and snakes on the game board
+    function _initializeLaddersAndSnakes() private {
+        // Define ladders: start position -> end position
+        ladders[4] = 25;
+        ladders[13] = 46;
+        ladders[33] = 49;
+        ladders[42] = 63;
+        ladders[50] = 69;
+        ladders[62] = 81;
+        ladders[74] = 92;
+
+        // Define snakes: head position -> tail position
+        snakes[27] = 5;
+        snakes[40] = 3;
+        snakes[43] = 18;
+        snakes[54] = 31;
+        snakes[66] = 45;
+        snakes[76] = 58;
+        snakes[89] = 53;
+        snakes[99] = 41;
+    }
+
+    // Function for players to join the game
+    function joinGame() external payable whenNotPaused nonReentrant {
+        require(msg.value == ENTRY_FEE, "Invalid entry fee");
+        
+        if (activePlayerCount >= MAX_PLAYERS) {
+            removeInactivePlayers();
+        }
+        
+        require(activePlayerCount < MAX_PLAYERS, "Max players");
+        require(!players[msg.sender].isActive, "Already active");
+
+        // Check for first heroes
+        if (firstHeroes.length < MAX_HEROES && !isFirstHero[msg.sender]) {
+            firstHeroes.push(msg.sender);
+            isFirstHero[msg.sender] = true;
+            emit PlayerJoined(msg.sender);
+            // Emit message for first heroes
+            emit FirstHeroRegistered(msg.sender); // Emit event for first hero registration
+        }
+
+        _processEntryFee(msg.value);
+
+        players[msg.sender] = Player({
+            position: 1,
+            hasAntidote: false,
+            isActive: true,
+            diceRollCount: 0,
+            lastDiceRoll: 0,
+            group: 0,
+            lastActivityTime: block.timestamp,
+            joinedAt: block.timestamp,
+            antidoteCount: 0,
+            snakeEncounters: 0
+        });
+
+        // Add the new player address to the playerAddresses array
+        playerAddresses.push(msg.sender);
+
+        activePlayerCount++;
+        emit PlayerJoined(msg.sender);
+    }
+
+    // Private function to process the entry fee
+    function _processEntryFee(uint256 amount) private {
+        uint256 ownerShare = (amount * OWNER_SHARE_PERCENT) / 100; // Calculate owner's share
+        uint256 remainingAmount = amount - ownerShare; // Calculate remaining amount after owner's share
+
+        prizePool += remainingAmount; // Add remaining amount to prize pool
+        payable(owner()).transfer(ownerShare); // Transfer owner's share to the owner
+
+        // Distribute the remaining amount based on group percentages
+        _distributeToGroups(remainingAmount);
+    }
+
+    // Private function to distribute the remaining amount to groups based on percentages
+    function _distributeToGroups(uint256 remainingAmount) private {
+        for (uint256 i = 0; i < groupPercentages.length; i++) {
+            uint256 distributionAmount = (remainingAmount * groupPercentages[i]) / 100; // Calculate amount for each group
+            groupBalances[uint8(i + 1)] += distributionAmount; // Add to the respective group balance
+        }
+    }
+
+    // Function for players to roll the dice
+    function rollDice(uint256 userProvidedSeed) external whenNotPaused nonReentrant onlyEOA {
+        Player storage player = players[msg.sender]; // Get the player data
+        require(player.isActive, "Inactive player"); // Ensure player is active
+        require(player.position < 100, "Already finished"); // Ensure player has not finished
+
+        // Update last activity time
+        player.lastActivityTime = block.timestamp;
+
+        uint8 diceValue = _generateDiceValue(userProvidedSeed); // Generate dice value
+        player.diceRollCount++; // Increment dice roll count
+        player.lastDiceRoll = diceValue; // Store the last dice roll result
+
+        // Calculate new position based on dice value
+        uint8 newPosition = player.position + diceValue; // Calculate new position
+
+        // Check if the new position exceeds the board limit
+        require(newPosition <= 100, "Cannot move to that position"); // Ensure the new position is valid
+
+        // Check if the player can move based on their current position
+        require(_canMove(player.position, diceValue), "Cannot move to that position");
+
+        // Update player position and check for snake encounter
+        player.position = _calculateFinalPosition(player.position, diceValue); // Update player position
+
+        // Check if the player has won
+        if (player.position == 100) {
+            _declareWinner(msg.sender); // Declare the player as a winner
+        } else if (snakes[player.position] != 0) {
+            // Handle snake encounter
+            _handleSnakeEncounter(player.position);
+        }
+
+        emit DiceRolled(msg.sender, diceValue, player.position); // Emit event for dice roll
+    }
+
+    // Function to check if the player can move based on their current position and dice roll
+    function _canMove(uint8 currentPosition, uint8 diceValue) private pure returns (bool) {
+        uint8 newPosition = currentPosition + diceValue; // Calculate new position
+
+        // Check if new position exceeds the board limit
+        if (newPosition > 100) {
+            return false;
+        }
+
+        // Check other movement restrictions
+        if (currentPosition == 95 && diceValue == 6) return false;
+        if (currentPosition == 96 && (diceValue == 5 || diceValue == 6)) return false;
+        if (currentPosition == 97 && (diceValue >= 4 && diceValue <= 6)) return false;
+        if (currentPosition == 98 && (diceValue >= 3 && diceValue <= 6)) return false;
+
+        return true;
+    }
+
+    // Private function to generate a random dice value
+    function _generateDiceValue(uint256 userProvidedSeed) private view returns (uint8) {
+        uint256 blockTimestamp = block.timestamp; // Current block timestamp
+        uint256 blockNumber = block.number; // Current block number
+        bytes32 blockHash = blockhash(blockNumber - 1); // Hash of the previous block
+        // Create a seed for randomness
+        bytes32 seed = keccak256(abi.encodePacked(userProvidedSeed, blockTimestamp, blockNumber, blockHash));
+        return uint8((uint256(seed) % 6) + 1); // Return a value between 1 and 6
+    }
+
+    // Private function to check if a player landed on a ladder or snake
+    function _getLadderOrSnakePosition(uint8 position) private view returns (uint8) {
+        if (ladders[position] != 0) {
+            return uint8(ladders[position]); // Return the end position of the ladder
+        } else if (snakes[position] != 0) {
+            return uint8(snakes[position]); // Return the tail position of the snake
+        }
+        return position; // Return the original position if neither
+    }
+
+    // Private function to calculate the final position of the player
+    function _calculateFinalPosition(uint8 currentPosition, uint8 diceValue) private view returns (uint8) {
+        uint8 newPosition = currentPosition + diceValue; // Calculate new position
+        if (newPosition > 100) newPosition = 100; // Cap at 100
+
+        uint8 finalPosition = _getLadderOrSnakePosition(newPosition); // Get final position considering ladders and snakes
+
+        return finalPosition; // Return the final position
+    }
+
+    function _handleSnakeEncounter(uint8 position) private {
+        Player storage player = players[msg.sender]; // Get the player data
+        player.snakeEncounters++; // Increment snake encounter count initially
+
+        // Check if the player has encountered a snake three times
+        if (player.snakeEncounters >= 3) {
+            player.isActive = false; // Eliminate the player
+            emit PlayerEliminated(msg.sender); // Emit event for player elimination
+            return;
+        }
+
+        // If the player has an antidote
+        if (player.antidoteCount > 0) {
+            // Use the antidote automatically
+            player.antidoteCount--; // Decrement antidote count
+            emit AntidoteUsed(msg.sender, player.antidoteCount); // Emit event for antidote usage
+            emit SnakeEncountered(msg.sender, position, true); // Emit event for snake encounter with antidote usage
+            player.snakeEncounters--; // Decrement snake encounters count if antidote is used
+            return; // Player stays in the same position
+        } else {
+            // If the player does not have an antidote
+            player.position = uint8(snakes[position]); // Move the player to the tail position of the snake
+            emit SnakeEncountered(msg.sender, position, false); // Emit event for snake encounter without antidote
+            // Emit a message for poisoning
+            emit PlayerPoisoned(msg.sender); // Emit event for player poisoning
+        }
+    }
+
+    // Function for players to buy an antidote
+function buyAntidote() external payable whenNotPaused nonReentrant {
+    require(msg.value == ANTIDOTE_FEE, "Invalid antidote fee"); // Ensure correct fee is paid
+    require(players[msg.sender].isActive, "Inactive player"); // Ensure player is active
+    require(players[msg.sender].antidoteCount < MAX_ANTIDOTES, "Max antidotes"); // Ensure antidote limit is not exceeded
+
+    // Process payment similar to joinGame
+    uint256 ownerShare = (msg.value * OWNER_SHARE_PERCENT) / 100; // Calculate owner's share
+    uint256 remainingAmount = msg.value - ownerShare; // Calculate remaining amount after owner's share
+
+    prizePool += remainingAmount; // Add remaining amount to prize pool
+    payable(owner()).transfer(ownerShare); // Transfer owner's share to the owner
+
+    // Distribute the remaining amount based on group percentages
+    _distributeToGroups(remainingAmount);
+
+    players[msg.sender].antidoteCount++; // Increment antidote count
+    emit AntidotePurchased(msg.sender, players[msg.sender].antidoteCount); // Emit event for antidote purchase
+}
+
+    // Private function to declare a winner
+    function _declareWinner(address winner) private {
+        require(prizePool > 0, "No prize available"); // Ensure there is a prize available
+        require(!isWinner[winner], "Already won"); // Check if the player has already won
+
+        Player storage player = players[winner]; // Get the winner's data
+        player.isActive = false; // Set player status to inactive
+        activePlayerCount--; // Decrease active player count
+
+        // Check if the player has rolled the dice too many times
+        if (player.diceRollCount > 28) {
+            emit PlayerEliminated(winner); // Emit event for player elimination due to too many rolls
+            return; // Exit the function early
+        }
+
+        winners.push(winner); // Add winner to the winners list
+        totalWinners++; // Increment total winners count
+        isWinner[winner] = true; // Mark the player as a winner
+
+        // Determine the group based on the number of dice rolls
+        if (player.diceRollCount <= 9) {
+            player.group = 1; // Group 1 for 9 rolls or less
+        } else if (player.diceRollCount == 10) {
+            player.group = 2; // Group 2 for exactly 10 rolls
+        } else if (player.diceRollCount == 11) {
+            player.group = 3; // Group 3 for exactly 11 rolls
+        } else if (player.diceRollCount == 12) {
+            player.group = 4; // Group 4 for exactly 12 rolls
+        } else if (player.diceRollCount == 13) {
+            player.group = 5; // Group 5 for exactly 13 rolls
+        } else if (player.diceRollCount == 14) {
+            player.group = 6; // Group 6 for exactly 14 rolls
+        } else if (player.diceRollCount == 15) {
+            player.group = 7; // Group 7 for exactly 15 rolls
+        } else if (player.diceRollCount == 16) {
+            player.group = 8; // Group 8 for exactly 16 rolls
+        } else if (player.diceRollCount == 17) {
+            player.group = 9; // Group 9 for exactly 17 rolls
+        } else if (player.diceRollCount == 18) {
+            player.group = 10; // Group 10 for exactly 18 rolls
+        } else if (player.diceRollCount == 19) {
+            player.group = 11; // Group 11 for exactly 19 rolls
+        } else if (player.diceRollCount == 20) {
+            player.group = 12; // Group 12 for exactly 20 rolls
+        } else if (player.diceRollCount == 21) {
+            player.group = 13; // Group 13 for exactly 21 rolls
+        } else if (player.diceRollCount == 22) {
+            player.group = 14; // Group 14 for exactly 22 rolls
+        } else if (player.diceRollCount == 23) {
+            player.group = 15; // Group 15 for exactly 23 rolls
+        } else if (player.diceRollCount == 24) {
+            player.group = 16; // Group 16 for exactly 24 rolls
+        } else if (player.diceRollCount == 25) {
+            player.group = 17; // Group 17 for exactly 25 rolls
+        } else if (player.diceRollCount == 26) {
+            player.group = 18; // Group 18 for exactly 26 rolls
+        } else if (player.diceRollCount == 27) {
+            player.group = 19; // Group 19 for exactly 27 rolls
+        } else if (player.diceRollCount == 28) {
+            player.group = 20; // Group 20 for exactly 28 rolls
+        }
+
+        emit PlayerWon(winner, 0); // Emit event for player win (amount will be distributed later)
+    }
+
+    function _distributePool() private {
+        require(block.timestamp >= lastDistributionTime + DISTRIBUTION_INTERVAL, "Distribution not yet available");
+        lastDistributionTime = block.timestamp; // Update the last distribution time
+
+        // Loop through each group and distribute the corresponding balance
+        for (uint8 i = 1; i <= 20; i++) {
+            uint256 groupBalance = groupBalances[i]; // Get the balance for the group
+
+            // Distribute the group balance even if there are no winners
+            if (groupBalance > 0) {
+                // If there are winners, distribute the prizes
+                address[] memory groupWinners = _getGroupWinners(i); // Get winners for the group
+                uint256 winnerCount = groupWinners.length; // Count of winners in the group
+
+                if (winnerCount > 0) {
+                    uint256 perWinner = groupBalance / winnerCount; // Calculate prize per winner
+                    // Loop through winners and transfer the prize
+                    for (uint256 j = 0; j < winnerCount; j++) {
+                        _transferPrize(groupWinners[j], perWinner); // Transfer prize to each winner
+                    }
+                } else {
+                    // If no winners, keep the group balance for the next distribution
+                    // This ensures that the balance is not lost and can be used later
+                    continue; // Skip to the next group
+                }
+
+                groupBalances[i] = 0; // Reset the group balance after distribution
+            }
+        }
+
+        emit PrizeDistributed(0, winners); // Emit event for prize distribution (0 as no overall distribution amount)
+    }
+
+    // Private function to get winners for a specific group
+    function _getGroupWinners(uint8 group) private view returns (address[] memory) {
+        address[] memory groupWinners = new address[](totalWinners);
+        uint256 count = 0;
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            if (players[winners[i]].group == group) {
+                groupWinners[count] = winners[i];
+                count++;
+            }
+        }
+
+        // Resize the array to fit the actual number of winners
+        address[] memory finalWinners = new address[](count);
+        for (uint256 j = 0; j < count; j++) {
+            finalWinners[j] = groupWinners[j];
+        }
+
+        return finalWinners; // Return the list of winners for the specified group
+    }
+
+    // Private function to transfer prize to a winner
+    function _transferPrize(address winner, uint256 amount) private {
+        payable(winner).transfer(amount); // Transfer the prize amount to the winner
+        emit PrizeWithdrawn(winner, amount); // Emit event for prize withdrawal
+    }
+
+    // Function to check if a player is a winner
+    function checkIfWinner(address playerAddress) internal view returns (bool) {
+        for (uint256 i = 0; i < winners.length; i++) {
+            if (winners[i] == playerAddress) {
+                return true; // Player is a winner
+            }
+        }
+        return false; // Player is not a winner
+    }
+
+    // Function to remove inactive players from the game
+    function removeInactivePlayers() internal {
+        address[] memory inactivePlayers = new address[](activePlayerCount); // Array to store inactive players
+        uint256 count = 0; // Counter for inactive players
+
+        // Loop through the current winners to check their status
+        for (uint256 i = 0; i < winners.length; i++) {
+            address playerAddress = winners[i];
+            Player storage player = players[playerAddress];
+
+            // Check if the player is inactive
+            bool isInactive = (block.timestamp > player.lastActivityTime + 12 hours) || 
+                              (player.diceRollCount == 0 && block.timestamp > player.joinedAt + 1 minutes);
+            
+            // Prevent deletion of winners
+            if (isInactive && !checkIfWinner(playerAddress)) {
+                player.isActive = false; // Set player status to inactive
+                inactivePlayers[count] = playerAddress; // Add to inactive players list
+                count++; // Increment count
+            }
+        }
+
+        // Loop through all players in the players mapping
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i]; // Get the player address from the array
+            Player storage player = players[playerAddress];
+
+            // Check if the player has been inactive for too long
+            if (block.timestamp > player.joinedAt + 1 minutes || block.timestamp > player.lastActivityTime + 1 minutes) {
+                // Prevent deletion of winners
+                if (!checkIfWinner(playerAddress)) {
+                    player.isActive = false; // Eliminate the player
+                    inactivePlayers[count] = playerAddress; // Add to inactive players list
+                    count++; // Increment count
+                }
+            }
+        }
+
+        activePlayerCount -= count; // Decrease active player count
+        emit PlayersRemoved(inactivePlayers); // Emit event for removed players
+    }
+
+    // Function to pause or unpause the contract
+    function togglePause() external onlyOwner {
+        paused = !paused; // Toggle the paused state
+        emit ContractPaused(paused); // Emit event for contract pause/unpause
+    }
+
+    // Function to reclaim group funds after 365 days
+    function reclaimGroupFunds(uint8 group) external onlyOwner {
+        require(block.timestamp > lastDistributionTime + 30 days, "Too early");
+        uint256 amount = groupBalances[group];
+        groupBalances[group] = 0;
+        payable(owner()).transfer(amount);
+    }
+
+    // Function to get the count of active players
+    function getActivePlayers() external view returns (uint256) {
+        return activePlayerCount; // Return the active player count
+    }
+
+    // Function for the owner to withdraw the contract balance
+    function withdraw() external onlyOwner nonReentrant {
+        payable(owner()).transfer(address(this).balance); // Transfer the contract balance to the owner
+    }
+
+    // Function to get the status of a specific player
+    function getPlayerStatus(address playerAddress) external view returns (Player memory) {
+        return players[playerAddress]; // Return the player's data
+    }
+
+    // Function to get the current prize pool and total winners
+    function getPrizePoolAndWinners() external view returns (uint256, uint256) {
+        return (prizePool, totalWinners); // Return the prize pool and total winners count
+    }
+
+    // Function to get the current status of the contract
+    function getContractStatus() external view returns (bool pausedStatus, uint256 poolBalance, uint256 activeCount) {
+        return (paused, prizePool, activePlayerCount); // Return the paused status, prize pool balance, and active player count
+    }
+	function distributePool() external whenNotPaused nonReentrant {
+    _distributePool();
+}
+}

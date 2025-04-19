@@ -32,12 +32,13 @@
 }
 
 .player-image {
-    width: 99%;
-    height: 99%;
+    width: 80%; /* اندازه پایه کوچکتر برای جلوگیری از سرریز */
+    height: 80%;
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%); /* پایه برای موقعیت‌دهی */
+    transition: transform 0.05s ease; /* ترنزیشن روان برای تغییر مقیاس */
     pointer-events: none;
     z-index: 10;
 }
@@ -47,7 +48,7 @@
     font-size: 14px;
     color: black;
     z-index: 1;
-    visibility: hidden;
+    visibility: hidden; /* شماره‌ها مخفی هستند */
 }
 
 .square.active {
@@ -67,8 +68,8 @@ button {
     }
 
     .player-image {
-        width: 50%;
-        height: 50%;
+        width: 70%; /* اندازه کوچکتر برای دستگاه‌های موبایل */
+        height: 70%;
     }
 }
 
@@ -79,7 +80,7 @@ button {
     }
 
     .player-image {
-        width: 40%;
-        height: 40%;
+        width: 60%;
+        height: 60%;
     }
 }

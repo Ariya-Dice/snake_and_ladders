@@ -10,25 +10,31 @@ const WalletConnectButton = ({ onConnect }) => {
 
     const isAndroid = /android/i.test(navigator.userAgent);
 
+    // Define deep links and download links for wallets
     const walletDeepLinks = {
         trust: {
             deeplink: 'trust://wc?uri=',
-            universal: 'https://link.trustwallet.com/wc?uri='
+            universal: 'https://link.trustwallet.com/wc?uri=',
+            download: 'https://trustwallet.com/download'
         },
         metamask: {
             deeplink: 'metamask://wc?uri=',
-            universal: 'https://metamask.app.link/wc?uri='
+            universal: 'https://metamask.app.link/wc?uri=',
+            download: 'https://metamask.io/download/'
         },
         coinbase: {
             deeplink: 'cbwallet://wc?uri=',
-            universal: 'https://go.cb-w.com/wc?uri='
+            universal: 'https://go.cb-w.com/wc?uri=',
+            download: 'https://www.coinbase.com/wallet/downloads'
         },
         safepal: {
             deeplink: 'safepalwallet://wc?uri=',
-            universal: 'https://www.safepal.com/download'
+            universal: 'https://www.safepal.com/download',
+            download: 'https://www.safepal.com/download'
         }
     };
 
+    // Check if the deep link is available for the wallet
     const checkDeeplinkAvailability = async (wallet) => {
         return new Promise((resolve) => {
             const iframe = document.createElement('iframe');
@@ -37,7 +43,7 @@ const WalletConnectButton = ({ onConnect }) => {
 
             const timeout = setTimeout(() => {
                 alert(`Wallet not detected. Redirecting to ${wallet.universal}`);
-                window.location.href = wallet.universal;
+                window.location.href = wallet.download; // Redirect to download page if not installed
                 resolve(false);
             }, 500);
 
@@ -51,6 +57,7 @@ const WalletConnectButton = ({ onConnect }) => {
         });
     };
 
+    // Check installed wallets
     const checkInstalledWallets = async (links) => {
         try {
             for (const [walletName, info] of Object.entries(links)) {
@@ -65,12 +72,14 @@ const WalletConnectButton = ({ onConnect }) => {
         }
     };
 
+    // Handle successful connection
     const handleSuccess = async (account, provider) => {
         setAccount(account);
         const signer = await provider.getSigner();
-        onConnect(account, signer); // پاس دادن account و signer به onConnect
+        onConnect(account, signer); // Pass account and signer to onConnect
     };
 
+    // Handle errors with improved messages
     const handleError = (error) => {
         let errorMessage = 'Failed to connect to wallet';
 
@@ -79,7 +88,7 @@ const WalletConnectButton = ({ onConnect }) => {
         } else if (error.code === -32002) {
             errorMessage = 'A connection request is already pending';
         } else if (error.message.includes('No provider found')) {
-            errorMessage = 'No wallet detected. Please install MetaMask or another wallet';
+            errorMessage = 'No wallet detected. Please install a compatible wallet like MetaMask or Trust Wallet.';
         } else {
             errorMessage = error.message || 'An unexpected error occurred';
         }
@@ -92,12 +101,13 @@ const WalletConnectButton = ({ onConnect }) => {
         });
     };
 
+    // Function to connect to wallet
     const connectWallet = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            // ابتدا تلاش برای اتصال به MetaMask
+            // First, try to connect to MetaMask
             const provider = await detectEthereumProvider();
             if (provider && provider.isMetaMask) {
                 const ethersProvider = new ethers.BrowserProvider(provider);
@@ -106,12 +116,12 @@ const WalletConnectButton = ({ onConnect }) => {
                 return;
             }
 
-            // در غیر این صورت، استفاده از WalletConnect
+            // Otherwise, use WalletConnect
             const walletConnectProvider = new WalletConnectProvider({
                 rpc: {
-                    97: 'https://bsc-testnet-rpc.publicnode.com', // برای BSC Testnet
+                    97: 'https://bsc-testnet-rpc.publicnode.com', // For BSC Testnet
                 },
-                chainId: 97, // chainId برای BSC Testnet
+                chainId: 97, // chainId for BSC Testnet
                 qrcode: true,
                 qrcodeModalOptions: {
                     mobileLinks: ['metamask', 'trust', 'coinbase', 'safepal'],
@@ -131,12 +141,16 @@ const WalletConnectButton = ({ onConnect }) => {
 
     return (
         <div>
-            <button 
-                onClick={connectWallet} 
+            <button
+                onClick={connectWallet}
                 disabled={loading}
                 className="wallet-connect-button"
             >
-                {loading ? 'Connecting...' : account ? `Connected: ${account.substring(0, 6)}...${account.substring(account.length - 4)}` : 'Connect Wallet'}
+                {loading
+                    ? 'Connecting...'
+                    : account
+                    ? `Connected: ${account.substring(0, 6)}...${account.substring(account.length - 4)}`
+                    : 'Connect Wallet'}
             </button>
             {error && <p style={{ color: 'red' }}>{error}</p>}
         </div>
