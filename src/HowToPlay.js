@@ -165,14 +165,26 @@ The first 5,000 participants will receive special game tokens as rewards in the 
         </>
     );
 
-     return (
+    return (
         <div className="how-to-play-modal" ref={ref}>
             <div className="modal-header">
                 <h2 className="modal-title">How to Play</h2>
                 <div className="modal-header-buttons">
-                    <button className="modal-language-button" onClick={() => setLanguage('en')} className={language === 'en' ? 'active' : ''}>English</button>
-                    <button className="modal-language-button" onClick={() => setLanguage('fa')} className={language === 'fa' ? 'active' : ''}>فارسی</button>
-                    <button className="modal-close-button" onClick={onClose}>Close</button>
+                    <button
+                        className={`modal-language-button ${language === 'en' ? 'active' : ''}`}
+                        onClick={() => setLanguage('en')}
+                    >
+                        English
+                    </button>
+                    <button
+                        className={`modal-language-button ${language === 'fa' ? 'active' : ''}`}
+                        onClick={() => setLanguage('fa')}
+                    >
+                        فارسی
+                    </button>
+                    <button className="modal-close-button" onClick={onClose}>
+                        Close
+                    </button>
                 </div>
             </div>
             <div className="modal-content">
