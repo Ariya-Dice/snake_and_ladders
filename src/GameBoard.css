@@ -1,0 +1,86 @@
+.App {
+    text-align: center;
+    display: flex;
+    align-items: center;
+    min-height: 100vh;
+    position: relative;
+    padding: 10px;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(40px, 8vmin));
+    grid-template-rows: repeat(10, minmax(40px, 8vmin));
+    margin: 5px auto;
+    width: fit-content;
+    background-image: url('./snake.svg');
+    background-size: cover;
+    background-position: center;
+    position: relative;
+    height: fit-content;
+    max-width: 90%;
+    aspect-ratio: 1 / 1;
+}
+
+.square {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background-color: transparent;
+    position: relative;
+}
+
+.player-image {
+    width: 80%; /* اندازه پایه کوچکتر برای جلوگیری از سرریز */
+    height: 80%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* پایه برای موقعیت‌دهی */
+    transition: transform 0.05s ease; /* ترنزیشن روان برای تغییر مقیاس */
+    pointer-events: none;
+    z-index: 10;
+}
+
+.square-number {
+    display: block;
+    font-size: 14px;
+    color: black;
+    z-index: 1;
+    visibility: hidden; /* شماره‌ها مخفی هستند */
+}
+
+.square.active {
+    background-color: rgba(76, 175, 80, 0.2);
+}
+
+button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+
+@media (max-width: 768px) {
+    .board {
+        grid-template-columns: repeat(10, minmax(30px, 6vmin));
+        grid-template-rows: repeat(10, minmax(30px, 6vmin));
+    }
+
+    .player-image {
+        width: 70%; /* اندازه کوچکتر برای دستگاه‌های موبایل */
+        height: 70%;
+    }
+}
+
+@media (max-width: 480px) {
+    .board {
+        grid-template-columns: repeat(10, minmax(20px, 4vmin));
+        grid-template-rows: repeat(10, minmax(20px, 4vmin));
+    }
+
+    .player-image {
+        width: 60%;
+        height: 60%;
+    }
+}
