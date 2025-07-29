@@ -21,6 +21,7 @@ function App() {
     antidoteCount: 0,
     snakeEncounters: 0,
   });
+
   const [destination, setDestination] = useState(1);
   const [loading, setLoading] = useState(false);
   const [activePlayers, setActivePlayers] = useState(0);
@@ -32,12 +33,14 @@ function App() {
   const [isRolling, setIsRolling] = useState(false);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [showWalletConnect, setShowWalletConnect] = useState(false);
+
   const [contractActions, setContractActions] = useState({
     joinGame: null,
     rollDice: null,
     buyAntidote: null,
     handleWalletConnect: null,
   });
+
   const howToPlayRef = useRef(null);
 
   useEffect(() => {
@@ -46,19 +49,22 @@ function App() {
         setShowHowToPlay(false);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   return (
     <div className="app">
       <IntroDialog
         onYesClick={() => setShowWalletConnect(true)}
-        onNoClick={() => console.log('User clicked No')}
+        onNoClick={() => {
+          console.log('User clicked No');
+          // You could add: setShowWalletConnect(false);
+        }}
         isWalletConnected={isWalletConnected}
       />
+
       <ContractManager
         signer={signer}
         setSigner={setSigner}
@@ -75,8 +81,9 @@ function App() {
         setDestination={setDestination}
         playerInfo={playerInfo}
         setContractActions={setContractActions}
-        isWalletConnected={isWalletConnected} // اضافه کردن پراپ
+        isWalletConnected={isWalletConnected}
       />
+
       <GameUI
         playerInfo={playerInfo}
         destination={destination}
@@ -95,6 +102,7 @@ function App() {
         buyAntidote={contractActions.buyAntidote}
         handleWalletConnect={contractActions.handleWalletConnect}
       />
+
       <SocialAndNotifications events={events} />
     </div>
   );
